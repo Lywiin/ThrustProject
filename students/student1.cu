@@ -2,11 +2,6 @@
 
 #include <iostream>
 
-float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
-	std::cout << in.getPixel(0, 0).r << std::endl;
-	return 0.f;
-}
-
 // converts a RGB color to a HSV one ...
 __device__
 float3 RGB2HSV( const uchar4 inRGB ) {
@@ -20,19 +15,19 @@ float3 RGB2HSV( const uchar4 inRGB ) {
 
 	// H
 	float H;
-	if( delta < FLT_EPSILON )
+	if( delta < 0 )
 		H = 0.f;
 	else if	( max == R )
-		H = 60.f * ( G - B ) / ( delta + FLT_EPSILON )+ 360.f;
+		H = 60.f * ( G - B ) / delta + 360.f;
 	else if ( max == G )
-		H = 60.f * ( B - R ) / ( delta + FLT_EPSILON ) + 120.f;
+		H = 60.f * ( B - R ) / delta + 120.f;
 	else
-		H = 60.f * ( R - G ) / ( delta + FLT_EPSILON ) + 240.f;
+		H = 60.f * ( R - G ) / delta + 240.f;
 	while	( H >= 360.f )
 		H -= 360.f ;
 
 	// S
-	float S = max < FLT_EPSILON ? 0.f : 1.f - min / max;
+	float S = max < 0 ? 0.f : 1.f - min / max;
 
 	// V
 	float V = max;
@@ -52,7 +47,7 @@ uchar4 HSV2RGB( const float H, const float S, const float V )
 	const float l = V * ( 1.f - S );
 	const float m = V * ( 1.f - f * S );
 	const float n = V * ( 1.f - ( 1.f - f ) * S );
-	
+
 	float R, G, B;
 
 	if	( hi == 0 )
@@ -75,7 +70,6 @@ uchar4 HSV2RGB( const float H, const float S, const float V )
 // Launched with 2D grid
 __global__
 void rgb2hsv(	const uchar4 *const inRGB, const int width, const int height, float *const outH, float *const outS, float *const outV ) {
-		
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tidx > width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -83,16 +77,15 @@ void rgb2hsv(	const uchar4 *const inRGB, const int width, const int height, floa
 	int tid = tidx + tidy * width;
 
 	float3 resultHSV = RGB2HSV(inRGB[tid]);
-	outH[tid] = resultHSV.x;    
-	outS[tid] = resultHSV.y;    
-	outV[tid] = resultHSV.z;    
+	outH[tid] = resultHSV.x;
+	outS[tid] = resultHSV.y;
+	outV[tid] = resultHSV.z;
 }
 
 // Conversion from HSV (inH, inS, inV) to RGB (outRGB)
 // Launched with 2D grid
 __global__
-void hsv2rgb(	const float *const inH, const float *const inS, const float *const inV, const int width, const int height, uchar4 *const outRGB ) {	
-
+void hsv2rgb(	const float *const inH, const float *const inS, const float *const inV, const int width, const int height, uchar4 *const outRGB ) {
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tidx > width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -101,5 +94,9 @@ void hsv2rgb(	const float *const inH, const float *const inS, const float *const
 
 	uchar4 outRGBtid = HSV2RGB(inH[tid], inS[tid], inV[tid]);
 	outRGB[tid] = outRGBtid;
+}
+
+float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
+	return 0.f;
 }
 
