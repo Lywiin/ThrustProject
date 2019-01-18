@@ -101,11 +101,11 @@ __device__
 void sort( float* inTab, int tabSize )
 {
 	int i = 0;
-	while (i < tabSize)
+	while (i < tabSize - 1)
 	{
 		if (inTab[i] > inTab[i + 1])
 		{
-			int temp = inTab[i];
+			float temp = inTab[i];
 			inTab[i] = inTab[i + 1];
 			inTab[i + 1] = temp;
 
@@ -135,23 +135,53 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 		height - (tid / height) - 1 < halfSize)
 	{
 		outHSV[tid] = inHSV[tid];
-	}else
+	}
+	else
 	{
-		float *sortTab;
-		int index = 0;
-		for (int x = tidx - halfSize; x <= tidx + halfSize; x++)
+
+		if (tid == width + 1)
 		{
-			for (int y = tidy - halfSize; y <= tidy + halfSize; y++)
+			printf("%d ", tid); 
+			printf("%d ", tidx - halfSize); 
+			printf("%d ", tidx + halfSize); 
+			printf("%d \n", halfSize);
+		}
+
+		float *sortTab = static_cast<float *>(malloc(windowSize * windowSize * sizeof(float)));
+		int index = 0;
+
+		for (int y = tidy - halfSize; y <= tidy + halfSize; y++)
+		{
+			for (int x = tidx - halfSize; x <= tidx + halfSize; x++)
 			{
 				int tempTid = x + y * width;
 				sortTab[index] = inHSV[tempTid].z;
 				index++;
 			}
+
 		}
+
+		if (tid == width + 1)
+		{
+			for (int i = 0; i < 9; i++)
+				printf("%f ", sortTab[i]); printf("\n");
+		}
+
 		sort(sortTab, windowSize * windowSize);
+
+		if (tid == width + 1)
+		{
+			for (int i = 0; i < 9; i++)
+				printf("%f ", sortTab[i]); printf("\n");
+		}
+
+
 		outHSV[tid] = inHSV[tid];
 		outHSV[tid].z = sortTab[windowSize + 1];
+		free(sortTab);
 	}
+
+//	outHSV[tid] = inHSV[tid];
 
 }
 
@@ -167,7 +197,6 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 * @param size: width of the kernel
 */
 float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
-
     //ChronoGPU chrUP, chrDOWN, chrGPU;
 
     // Setup
@@ -180,11 +209,13 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     int pixelCount = width * height;
 
     uchar3 *devRGB;
+    uchar3 *devRGBOutput;
     float3 *devHSV;
     float3 *devHSVOutput;
 
     // Allocate device memory
     cudaMalloc(&devRGB, pixelCount * sizeof(uchar3));
+    cudaMalloc(&devRGBOutput, pixelCount * sizeof(uchar3));
     cudaMalloc(&devHSV, pixelCount * sizeof(float3));
     cudaMalloc(&devHSVOutput, pixelCount * sizeof(float3));
 
@@ -215,9 +246,10 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 	// Median Filter
     medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, 3);
+	printf("ALLOW\n");
 
 	// Convertion from HSV to RGB
-    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGB, width, height);
+    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
 
 	//chrGPU.stop();
 
@@ -225,7 +257,10 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     //======================
     //chrDOWN.start();
     // Copy memory from device to host
-    cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	cudaError_t err = cudaGetLastError();
+	if (err != cudaSuccess)
+		printf("Error: %s\n", cudaGetErrorString(err));
 
     // Convert output from uchar3 to PPMBitmap
     i = 0;
@@ -242,6 +277,7 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	cudaFree(&devHSVOutput);
 
 	//chrDOWN.stop();
+
 
     // Return
     //======================
