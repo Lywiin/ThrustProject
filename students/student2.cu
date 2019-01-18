@@ -98,14 +98,14 @@ void hsv2rgb( const float3 *inHSV, uchar3 *const outRGB, const int width, const 
 }
 
 __device__
-void sort( float* inTab, int tabSize )
+void sort( float3* inTab, int tabSize )
 {
 	int i = 0;
 	while (i < tabSize - 1)
 	{
-		if (inTab[i] > inTab[i + 1])
+		if (inTab[i].z > inTab[i + 1].z)
 		{
-			float temp = inTab[i];
+			float3 temp = inTab[i];
 			inTab[i] = inTab[i + 1];
 			inTab[i + 1] = temp;
 
@@ -147,7 +147,7 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 			printf("%d \n", halfSize);
 		}
 
-		float *sortTab = static_cast<float *>(malloc(windowSize * windowSize * sizeof(float)));
+		float3 *sortTab = static_cast<float3 *>(malloc(windowSize * windowSize * sizeof(float3)));
 		int index = 0;
 
 		for (int y = tidy - halfSize; y <= tidy + halfSize; y++)
@@ -155,7 +155,7 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 			for (int x = tidx - halfSize; x <= tidx + halfSize; x++)
 			{
 				int tempTid = x + y * width;
-				sortTab[index] = inHSV[tempTid].z;
+				sortTab[index] = inHSV[tempTid];
 				index++;
 			}
 
@@ -164,7 +164,7 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 		if (tid == width + 1)
 		{
 			for (int i = 0; i < 9; i++)
-				printf("%f ", sortTab[i]); printf("\n");
+				printf("%f ", sortTab[i].z); printf("\n");
 		}
 
 		sort(sortTab, windowSize * windowSize);
@@ -172,12 +172,11 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 		if (tid == width + 1)
 		{
 			for (int i = 0; i < 9; i++)
-				printf("%f ", sortTab[i]); printf("\n");
+				printf("%f ", sortTab[i].z); printf("\n");
 		}
 
 
-		outHSV[tid] = inHSV[tid];
-		outHSV[tid].z = sortTab[windowSize + 1];
+		outHSV[tid] = sortTab[windowSize + 1];
 		free(sortTab);
 	}
 
