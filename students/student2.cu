@@ -1,6 +1,6 @@
 #include "student2.hpp"
 #include "../utils/common.hpp"
-#include "../utils/chronoGPU.hpp"
+//#include "../utils/chronoGPU.hpp"
 #include "../utils/utils.cuh"
 
 #include <iostream>
@@ -72,7 +72,7 @@ uchar3 HSV2RGB( const float H, const float S, const float V )
 // Conversion from RGB (inRGB) to HSV (outH, outS, outV)
 // Launched with 2D grid
 __global__
-void rgb2hsv( const uchar3 *const inRGB, const float3 *outHSV, const int width, const int height ) {
+void rgb2hsv( const uchar3 *const inRGB, float3 *outHSV, const int width, const int height ) {
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tidx > width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -86,7 +86,7 @@ void rgb2hsv( const uchar3 *const inRGB, const float3 *outHSV, const int width, 
 // Conversion from HSV (inH, inS, inV) to RGB (outRGB)
 // Launched with 2D grid
 __global__
-void hsv2rgb( const float3 *inHSV, const int width, const int height, uchar3 *const outRGB ) {
+void hsv2rgb( const float3 *inHSV, uchar3 *const outRGB, const int width, const int height ) {
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tidx > width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -95,6 +95,64 @@ void hsv2rgb( const float3 *inHSV, const int width, const int height, uchar3 *co
 
 	uchar3 outRGBtid = HSV2RGB(inHSV[tid].x, inHSV[tid].y, inHSV[tid].z);
 	outRGB[tid] = outRGBtid;
+}
+
+__device__
+void sort( float* inTab, int tabSize )
+{
+	int i = 0;
+	while (i < tabSize)
+	{
+		if (inTab[i] > inTab[i + 1])
+		{
+			int temp = inTab[i];
+			inTab[i] = inTab[i + 1];
+			inTab[i + 1] = temp;
+
+			if (i > 0){ i--; }else{ i++; }
+		}else
+		{
+			i++;
+		}
+	}
+}
+
+// Apply median filter on HSV image
+// Launched with 2D grid
+__global__
+void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, const int height, const int windowSize ) {
+	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+	if (tidx > width) return;
+	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
+	if (tidy > height) return;
+	int tid = tidx + tidy * width;
+
+	int halfSize = windowSize / 2;
+
+	if (	tid % width < halfSize ||
+		width - (tid % width) - 1 < halfSize ||
+		tid / height < halfSize ||
+		height - (tid / height) - 1 < halfSize)
+	{
+		outHSV[tid] = inHSV[tid];
+	}else
+	{
+		float *sortTab;
+		int index = 0;
+		for (int x = tidx - halfSize; x <= tidx + halfSize; x++)
+		{
+			for (int y = tidy - halfSize; y <= tidy + halfSize; y++)
+			{
+				int tempTid = x + y * width;
+				sortTab[index] = inHSV[tempTid].z;
+				index++;
+			}
+		}
+		sort(sortTab, windowSize * windowSize);
+		outHSV[tid] = inHSV[tid];
+		outHSV[tid].z = sortTab[windowSize + 1];
+	}
+
 }
 
 
@@ -106,28 +164,30 @@ void hsv2rgb( const float3 *inHSV, const int width, const int height, uchar3 *co
 *
 * @param in: input image
 * @param out: output (filtered) image
-* @param size: width of the kernel 
+* @param size: width of the kernel
 */
 float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
-    ChronoGPU chrUP, chrDOWN, chrGPU;
+    //ChronoGPU chrUP, chrDOWN, chrGPU;
 
     // Setup
-    chrUP.start();
-    
+    //chrUP.start();
+
     // Get input dimensions
     int width = in.getWidth(); int height = in.getHeight();
-    
+
     // Compute number of pixels
     int pixelCount = width * height;
-    
+
     uchar3 *devRGB;
     float3 *devHSV;
+    float3 *devHSVOutput;
 
-    // Allocate device memory    
+    // Allocate device memory
     cudaMalloc(&devRGB, pixelCount * sizeof(uchar3));
     cudaMalloc(&devHSV, pixelCount * sizeof(float3));
-    
+    cudaMalloc(&devHSVOutput, pixelCount * sizeof(float3));
+
     // Convert input from PPMBitmap to uchar3
     uchar3 hostImage[pixelCount];
     int i = 0;
@@ -137,33 +197,33 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     		hostImage[i++] = make_uchar3(pixel.r, pixel.g, pixel.b);
     	}
     }
-    
+
     // Copy memory from host to device
     cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
-	chrUP.stop();
-    
+	//chrUP.stop();
+
     // Processing
-    chrGPU.start();
+    //chrGPU.start();
 
     // Setup kernel block and grid size
     dim3 blockSize = dim3(32, 32);
-    dim3 gridSize = dim3((width  + (blockSize.x-1))/blockSize.x, 
-    					 (height + (blockSize.y-1))/blockSize.y );
-        
+    dim3 gridSize = dim3((width  + (blockSize.x-1))/blockSize.x,
+     			 (height + (blockSize.y-1))/blockSize.y );
+
     // Convertion from RGB to HSV
     rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
 
 	// Median Filter
-/*    grayscale2D<<<gridSize, blockSize>>>(devRGB, devGray, inputImage->width, inputImage->height);
-*/
-	// Convertion from HSV to RGB
-    hsv2rgb<<<gridSize, blockSize>>>(devHSV, devRGB, width, height);
+    medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, 3);
 
-	chrGPU.stop();
-	
+	// Convertion from HSV to RGB
+    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGB, width, height);
+
+	//chrGPU.stop();
+
     // Cleaning
     //======================
-    chrDOWN.start();
+    //chrDOWN.start();
     // Copy memory from device to host
     cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 
@@ -175,14 +235,16 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     		i++;
     	}
     }
-    
-    // Free device Memory
-    cudaFree(&devRGB);
-	cudaFree(&devHSV);
 
-	chrDOWN.stop();
+    // Free device Memory
+	cudaFree(&devRGB);
+	cudaFree(&devHSV);
+	cudaFree(&devHSVOutput);
+
+	//chrDOWN.stop();
 
     // Return
     //======================
-    return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); //0.f;
+    //return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
+    return 0.f;
 }
