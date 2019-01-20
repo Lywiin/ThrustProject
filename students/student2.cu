@@ -174,6 +174,7 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 			}
 		}
 
+/*
 		for (int i = 0; i < halfSize; i++)
 		{
 			int min = i;
@@ -184,9 +185,9 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 			sortTab[i] = sortTab[min];
 			sortTab[min] = temp;
 		}
+*/
 
-
-//		sort(sortTab, windowSize * windowSize);
+		sort(sortTab, windowSize * windowSize);
 /*
 		if (tid == width * halfSize + halfSize)
 		{
