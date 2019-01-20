@@ -140,17 +140,22 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 	int tid = tidx + tidy * width;
 
 	int halfSize = windowSize / 2;
-
+/*
 	if (	tid % width < halfSize ||
 		width - (tid % width) - 1 < halfSize ||
 		tid / height < halfSize ||
 		height - (tid / width) - 1 < halfSize)
+	{
+*/
+	if (tidx < halfSize || height - tidx - 1 < halfSize || tidy < halfSize || width - tidy - 1 < halfSize)
 	{
 		outHSV[tid] = inHSV[tid];
 		outHSV[tid].z = 0;
 	}
 	else
 	{
+		if (tid < width)
+			printf("%d ", tid);
 
 
 		float3 *sortTab = static_cast<float3 *>(malloc(windowSize * windowSize * sizeof(float3)));
