@@ -100,6 +100,17 @@ void hsv2rgb( const float3 *inHSV, uchar3 *const outRGB, const int width, const 
 __device__
 void sort( float3* inTab, int tabSize )
 {
+	for (int i = 0; i < tabSize / 2; i++)
+	{
+		int min = i;
+		for (int l = i + 1; l < tabSize; ++l)
+			if (inTab[l].z < inTab[min].z)
+				min = l;
+		float3 temp = inTab[i];
+		inTab[i] = inTab[min];
+		inTab[min] = temp;
+	}
+/*
 	int i = 0;
 	while (i < tabSize - 1)
 	{
@@ -115,12 +126,13 @@ void sort( float3* inTab, int tabSize )
 			i++;
 		}
 	}
+*/
 }
 
 // Apply median filter on HSV image
 // Launched with 2D grid
 __global__
-void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, const int height, const int windowSize ) {
+void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const int height, const int windowSize ) {
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
 	if (tidx > width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
@@ -135,17 +147,11 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 		height - (tid / height) - 1 < halfSize)
 	{
 		outHSV[tid] = inHSV[tid];
+		outHSV[tid].z = 0;
 	}
 	else
 	{
 
-		if (tid == width + 1)
-		{
-			printf("%d ", tid); 
-			printf("%d ", tidx - halfSize); 
-			printf("%d ", tidx + halfSize); 
-			printf("%d \n", halfSize);
-		}
 
 		float3 *sortTab = static_cast<float3 *>(malloc(windowSize * windowSize * sizeof(float3)));
 		int index = 0;
@@ -161,20 +167,14 @@ void medianFilter( const float3 *inHSV, float3 *const outHSV, const int width, c
 
 		}
 
-		if (tid == width + 1)
-		{
-			for (int i = 0; i < 9; i++)
-				printf("%f ", sortTab[i].z); printf("\n");
-		}
-
 		sort(sortTab, windowSize * windowSize);
-
+/*
 		if (tid == width + 1)
 		{
 			for (int i = 0; i < 9; i++)
 				printf("%f ", sortTab[i].z); printf("\n");
 		}
-
+*/
 
 		outHSV[tid] = sortTab[windowSize + 1];
 		free(sortTab);
@@ -244,8 +244,8 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
 
 	// Median Filter
+	printf("width: %d, height: %d\n", width, height);
     medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, 3);
-	printf("ALLOW\n");
 
 	// Convertion from HSV to RGB
     hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
