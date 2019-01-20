@@ -4,6 +4,7 @@
 #include "../utils/utils.cuh"
 
 #include <iostream>
+#include <math.h>
 
 // converts a RGB color to a HSV one ...
 __device__
@@ -134,59 +135,68 @@ void sort( float3* inTab, int tabSize )
 __global__
 void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const int height, const int windowSize ) {
 	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
-	if (tidx > width) return;
+	if (tidx >= width) return;
 	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
-	if (tidy > height) return;
+	if (tidy >= height) return;
 	int tid = tidx + tidy * width;
 
 	int halfSize = windowSize / 2;
-/*
-	if (	tid % width < halfSize ||
-		width - (tid % width) - 1 < halfSize ||
+
+	if(tid == 0)
+		printf("windowSize: %d, halfSize: %d\n", windowSize, halfSize);
+
+	if (	tid % height < halfSize ||
+		height - (tid % height) - 1 < halfSize ||
 		tid / height < halfSize ||
-		height - (tid / width) - 1 < halfSize)
-	{
-*/
-	if (tidx < halfSize || height - tidx - 1 < halfSize || tidy < halfSize || width - tidy - 1 < halfSize)
+		width - (tid / height) - 1 < halfSize)
 	{
 		outHSV[tid] = inHSV[tid];
-		outHSV[tid].z = 0;
 	}
 	else
 	{
-		if (tid < width)
-			printf("%d ", tid);
+		float3 *sortTab = new float3[windowSize * windowSize];
+		//int index = 0;
 
-
-		float3 *sortTab = static_cast<float3 *>(malloc(windowSize * windowSize * sizeof(float3)));
-		int index = 0;
-
-		for (int y = tidy - halfSize; y <= tidy + halfSize; y++)
+		for (int x = -halfSize; x <= halfSize; x++)
 		{
-			for (int x = tidx - halfSize; x <= tidx + halfSize; x++)
+			for (int y = -halfSize; y <= halfSize; y++)
 			{
-				int tempTid = x + y * width;
-				sortTab[index] = inHSV[tempTid];
-				index++;
-			}
+				int tempTid = tid - (y * height + x);
 
+				if (tid == height * halfSize + halfSize)
+				{
+//					printf("%d ", tempTid);
+					printf("%d ", (x + halfSize) * windowSize + (y + halfSize));
+				}
+
+				sortTab[(x + halfSize) * windowSize + (y + halfSize)] = inHSV[tempTid];
+				//index++;
+			}
 		}
 
-		sort(sortTab, windowSize * windowSize);
-/*
-		if (tid == width + 1)
+		for (int i = 0; i < halfSize; i++)
 		{
-			for (int i = 0; i < 9; i++)
+			int min = i;
+			for (int l = i + 1; l < windowSize; ++l)
+				if (sortTab[l].z < sortTab[min].z)
+					min = l;
+			float3 temp = sortTab[i];
+			sortTab[i] = sortTab[min];
+			sortTab[min] = temp;
+		}
+
+
+//		sort(sortTab, windowSize * windowSize);
+/*
+		if (tid == width * halfSize + halfSize)
+		{
+			for (int i = 0; i < windowSize * windowSize; i++)
 				printf("%f ", sortTab[i].z); printf("\n");
 		}
 */
-
 		outHSV[tid] = sortTab[windowSize + 1];
 		free(sortTab);
 	}
-
-//	outHSV[tid] = inHSV[tid];
-
 }
 
 
@@ -241,16 +251,17 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
     //chrGPU.start();
 
     // Setup kernel block and grid size
-    dim3 blockSize = dim3(32, 32);
-    dim3 gridSize = dim3((width  + (blockSize.x-1))/blockSize.x,
-     			 (height + (blockSize.y-1))/blockSize.y );
+    dim3 blockSize = dim3(16, 16);
+    dim3 gridSize = dim3(ceilf(static_cast<float>(width) / blockSize.x),
+     			 ceilf(static_cast<float>(height) / blockSize.y));
+	printf("blockSize:%d %d, gridSize:%d %d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
 
     // Convertion from RGB to HSV
     rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
 
 	// Median Filter
 	printf("width: %d, height: %d\n", width, height);
-    medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, 3);
+    medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, size);
 
 	// Convertion from HSV to RGB
     hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
