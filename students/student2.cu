@@ -144,7 +144,7 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 	if (	tid % width < halfSize ||
 		width - (tid % width) - 1 < halfSize ||
 		tid / height < halfSize ||
-		height - (tid / height) - 1 < halfSize)
+		height - (tid / width) - 1 < halfSize)
 	{
 		outHSV[tid] = inHSV[tid];
 		outHSV[tid].z = 0;
