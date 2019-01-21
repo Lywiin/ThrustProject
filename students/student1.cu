@@ -223,7 +223,8 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 //    medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, size);
 
 	// Convertion from HSV to RGB
-    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
+//    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
+    hsv2rgb<<<gridSize, blockSize>>>(devHSV, devRGB, width, height);
 
 	//chrGPU.stop();
 
@@ -231,7 +232,8 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
     //======================
     //chrDOWN.start();
     // Copy memory from device to host
-    cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+//    cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+    cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 	cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess)
 		printf("Error: %s\n", cudaGetErrorString(err));
@@ -247,6 +249,7 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
     // Free device Memory
 	cudaFree(&devRGB);
+	cudaFree(&devRGBOutput);
 	cudaFree(&devHSV);
 	cudaFree(&devHSVOutput);
 

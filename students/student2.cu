@@ -254,6 +254,7 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
     // Free device Memory
 	cudaFree(&devRGB);
+	cudaFree(&devRGBOutput);
 	cudaFree(&devHSV);
 	cudaFree(&devHSVOutput);
 
