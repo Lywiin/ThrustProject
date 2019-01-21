@@ -177,82 +177,91 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 * @param size: width of the kernel
 */
 float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
-    ChronoGPU chrUP, chrDOWN, chrGPU;
+	ChronoGPU chrUP, chrDOWN, chrGPU;
 
-    // Setup
-    chrUP.start();
+	//*************
+	// SETUP
+	//*************
+	chrUP.start();
 
-    // Get input dimensions
-    int width = in.getWidth(); int height = in.getHeight();
+	// Get input dimensions
+	int width = in.getWidth(); int height = in.getHeight();
 
-    // Compute number of pixels
-    int pixelCount = width * height;
-
-    uchar3 *devRGB;
-    uchar3 *devRGBOutput;
-    float3 *devHSV;
-    float3 *devHSVOutput;
-
-    // Allocate device memory
-    cudaMalloc(&devRGB, pixelCount * sizeof(uchar3));
-    cudaMalloc(&devRGBOutput, pixelCount * sizeof(uchar3));
-    cudaMalloc(&devHSV, pixelCount * sizeof(float3));
-    cudaMalloc(&devHSVOutput, pixelCount * sizeof(float3));
-
-    // Convert input from PPMBitmap to uchar3
-    uchar3 hostImage[pixelCount];
-    int i = 0;
-    for (int w = 0; w < width; w ++) {
-    	for (int h = 0; h < height; h ++) {
-    		PPMBitmap::RGBcol pixel = in.getPixel( w, h );
-    		hostImage[i++] = make_uchar3(pixel.r, pixel.g, pixel.b);
-    	}
-    }
-
-    // Copy memory from host to device
-    cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
-	chrUP.stop();
-
-    // Processing
-    chrGPU.start();
-
-    // Setup kernel block and grid size
-    dim3 blockSize = dim3(16, 16);
-    dim3 gridSize = dim3(ceilf(static_cast<float>(width) / blockSize.x),
-     			 ceilf(static_cast<float>(height) / blockSize.y));
+	// Setup kernel block and grid size
+	dim3 blockSize = dim3(16, 16);
+	dim3 gridSize = dim3(ceilf(static_cast<float>(width) / blockSize.x),
+	 			 ceilf(static_cast<float>(height) / blockSize.y));
 	printf("blockSize:%d %d, gridSize:%d %d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
 
-    // Convertion from RGB to HSV
-    rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
+	// Compute number of pixels
+	int pixelCount = width * height;
+
+	uchar3 *devRGB;
+	uchar3 *devRGBOutput;
+	float3 *devHSV;
+	float3 *devHSVOutput;
+
+	// Allocate device memory
+	cudaMalloc(&devRGB, pixelCount * sizeof(uchar3));
+	cudaMalloc(&devRGBOutput, pixelCount * sizeof(uchar3));
+	cudaMalloc(&devHSV, pixelCount * sizeof(float3));
+	cudaMalloc(&devHSVOutput, pixelCount * sizeof(float3));
+
+	// Convert input from PPMBitmap to uchar3
+	uchar3 hostImage[pixelCount];
+	int i = 0;
+	for (int w = 0; w < width; w ++) {
+		for (int h = 0; h < height; h ++) {
+			PPMBitmap::RGBcol pixel = in.getPixel( w, h );
+			hostImage[i++] = make_uchar3(pixel.r, pixel.g, pixel.b);
+		}
+	}
+
+	// Copy memory from host to device
+	cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	chrUP.stop();
+
+	
+
+	//*************
+	// PROCESSING
+	//*************
+	chrGPU.start();
+
+	// Convertion from RGB to HSV
+	rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
 
 	// Median Filter
 	printf("width: %d, height: %d\n", width, height);
-    medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, size);
+	medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, size);
 
 	// Convertion from HSV to RGB
-    hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
+	hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
 
 	chrGPU.stop();
 
-    // Cleaning
-    //======================
-    chrDOWN.start();
-    // Copy memory from device to host
-    cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	
+
+	//*************
+	// CLEANING
+	//*************
+	chrDOWN.start();
+	// Copy memory from device to host
+	cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 	cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess)
 		printf("Error: %s\n", cudaGetErrorString(err));
 
-    // Convert output from uchar3 to PPMBitmap
-    i = 0;
-    for (int w = 0; w < width; w ++) {
-    	for (int h = 0; h < height; h ++) {
-    		out.setPixel( w, h, PPMBitmap::RGBcol(hostImage[i].x, hostImage[i].y, hostImage[i].z) );
-    		i++;
-    	}
-    }
+	// Convert output from uchar3 to PPMBitmap
+	i = 0;
+	for (int w = 0; w < width; w ++) {
+		for (int h = 0; h < height; h ++) {
+			out.setPixel( w, h, PPMBitmap::RGBcol(hostImage[i].x, hostImage[i].y, hostImage[i].z) );
+			i++;
+		}
+	}
 
-    // Free device Memory
+	// Free device Memory
 	cudaFree(&devRGB);
 	cudaFree(&devRGBOutput);
 	cudaFree(&devHSV);
@@ -261,8 +270,9 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	chrDOWN.stop();
 
 
-    // Return
-    //======================
-    return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
-    //return 0.f;
+
+	//*************
+	// RETURN
+	//*************
+	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
 }
