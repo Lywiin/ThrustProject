@@ -221,7 +221,7 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
 	chrUP.stop();
 
-	
+
 
 	//*************
 	// PROCESSING
@@ -240,7 +240,7 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 	chrGPU.stop();
 
-	
+
 
 	//*************
 	// CLEANING

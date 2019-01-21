@@ -208,9 +208,9 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	chrDOWN.stop();
 
 
-	
+
 	//*************
 	// RETURN
 	//*************
-	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
+	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime();
 }
