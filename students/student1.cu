@@ -1,7 +1,7 @@
 #include "student1.hpp"
 #include "student2.hpp"
 #include "../utils/common.hpp"
-//#include "../utils/chronoGPU.hpp"
+#include "../utils/chronoGPU.hpp"
 #include "../utils/utils.cuh"
 
 #include <iostream>
@@ -88,10 +88,10 @@ class MedianFilter : public thrust::unary_function<float3, float3> {
 };
 
 float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
-    //ChronoGPU chrUP, chrDOWN, chrGPU;
+	ChronoGPU chrUP, chrDOWN, chrGPU;
 
     // Setup
-    //chrUP.start();
+    chrUP.start();
 
     // Get input dimensions
     int width = in.getWidth(); int height = in.getHeight();
@@ -106,15 +106,11 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
     int pixelCount = width * height;
 
     uchar3 *devRGB;
-//    uchar3 *devRGBOutput;
     float3 *devHSV;
-//    float3 *devHSVOutput;
 
     // Allocate device memory
     cudaMalloc(&devRGB, pixelCount * sizeof(uchar3));
-//    cudaMalloc(&devRGBOutput, pixelCount * sizeof(uchar3));
     cudaMalloc(&devHSV, pixelCount * sizeof(float3));
-//    cudaMalloc(&devHSVOutput, pixelCount * sizeof(float3));
 
     float3 hostImageHSV[pixelCount];
 
@@ -128,11 +124,11 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
     	}
     }
 
-	//chrUP.stop();
+	chrUP.stop();
 
 
 	// Processing
-	//chrGPU.start();
+	chrGPU.start();
 
 	// CONVERTION RGB TO HSV
 	//======================
@@ -181,11 +177,11 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	// Copy memory from device to host
 	cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 
-	//chrGPU.stop();
+	chrGPU.stop();
 
 	// Cleaning
 	//======================
-	//chrDOWN.start();
+	chrDOWN.start();
 	cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess)
 		printf("Error: %s\n", cudaGetErrorString(err));
@@ -201,15 +197,13 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
     // Free device Memory
 	cudaFree(&devRGB);
-//	cudaFree(&devRGBOutput);
 	cudaFree(&devHSV);
-//	cudaFree(&devHSVOutput);
 
-	//chrDOWN.stop();
+	chrDOWN.stop();
 
 
     // Return
     //======================
-    //return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
-    return 0.f;
+    return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
+    //return 0.f;
 }

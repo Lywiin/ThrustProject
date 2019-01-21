@@ -1,6 +1,6 @@
 #include "student2.hpp"
 #include "../utils/common.hpp"
-//#include "../utils/chronoGPU.hpp"
+#include "../utils/chronoGPU.hpp"
 #include "../utils/utils.cuh"
 
 #include <iostream>
@@ -177,10 +177,10 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 * @param size: width of the kernel
 */
 float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
-    //ChronoGPU chrUP, chrDOWN, chrGPU;
+    ChronoGPU chrUP, chrDOWN, chrGPU;
 
     // Setup
-    //chrUP.start();
+    chrUP.start();
 
     // Get input dimensions
     int width = in.getWidth(); int height = in.getHeight();
@@ -211,10 +211,10 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
     // Copy memory from host to device
     cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
-	//chrUP.stop();
+	chrUP.stop();
 
     // Processing
-    //chrGPU.start();
+    chrGPU.start();
 
     // Setup kernel block and grid size
     dim3 blockSize = dim3(16, 16);
@@ -232,11 +232,11 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	// Convertion from HSV to RGB
     hsv2rgb<<<gridSize, blockSize>>>(devHSVOutput, devRGBOutput, width, height);
 
-	//chrGPU.stop();
+	chrGPU.stop();
 
     // Cleaning
     //======================
-    //chrDOWN.start();
+    chrDOWN.start();
     // Copy memory from device to host
     cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 	cudaError_t err = cudaGetLastError();
@@ -258,11 +258,11 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	cudaFree(&devHSV);
 	cudaFree(&devHSVOutput);
 
-	//chrDOWN.stop();
+	chrDOWN.stop();
 
 
     // Return
     //======================
-    //return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
-    return 0.f;
+    return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
+    //return 0.f;
 }
