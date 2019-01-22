@@ -15,10 +15,33 @@ class MedianFunctor : public thrust::unary_function<float3, float3> {
 	const int m_height;
 	const int m_size;
 	const int m_halfSize;
+
+	thrust::device_ptr<float3> m_sortTab;
+
 public:
 	__host__ __device__ MedianFunctor() = delete;
-	__host__ __device__ MedianFunctor(thrust::device_ptr<float3> d_HSVt, const int width, const int height, const int size, const int halfSize)  : m_width(width), m_height(height), m_d_HSVt(d_HSVt), m_size(size), m_halfSize(halfSize) {}
+	__host__ __device__ MedianFunctor(thrust::device_ptr<float3> d_HSVt, const int width, const int height, const int size, const int halfSize)  
+					: m_width(width), m_height(height), m_d_HSVt(d_HSVt), m_size(size), m_halfSize(halfSize) {}
 	MedianFunctor(const MedianFunctor&) = default;
+
+	// Fill an array in preparation for sorting
+	__host__ __device__
+	void fill( float3* inTab, int tid, int size )
+	{
+		int halfSize = size / 2;
+
+		// Double for loop to fill the array with pixel around the center pixel
+		for (int x = -halfSize; x <= halfSize; x++)
+		{
+			for (int y = -halfSize; y <= halfSize; y++)
+			{
+				// Compute temp tid of pixel that will be added
+				int tempTid = tid - (y * m_height + x);
+				// Add the pixel to the array
+				inTab[(x + halfSize) * size + (y + halfSize)] = m_d_HSVt[tempTid];
+			}
+		}
+	}
 
 	// Sort an array by ascending order using bubble sort method
 	__host__ __device__
@@ -37,43 +60,42 @@ public:
 	}
 
 	__host__ __device__ float3 operator()(int tid) {
-if (tid == 1)
-	printf("tid: %d\n", tid);
 
+		// Allocate memory for array of size windowSize*windowSize that will be sorted
+		float3 sortTab[225];
+		int s = m_size;
 
-		if (	tid % m_height < m_halfSize ||
-			m_height - (tid % m_height) - 1 < m_halfSize ||
-			tid / m_height < m_halfSize ||
-			m_width - (tid / m_height) - 1 < m_halfSize)
-		{
+		int leftB = tid % m_height;
+		int rightB = m_height - (tid % m_height) - 1;
+		int upB = tid / m_height;
+		int downB = m_width - (tid / m_height) - 1;
+
+		int minLR = (leftB < rightB ? leftB : rightB);
+		int minUP = (upB < downB ? upB : downB);
+		int min = (minLR < minUP ? minLR : minUP);
+
+		if ( leftB < m_halfSize )
+			s = min * 2 + 1;
+		else if ( rightB < m_halfSize )
+			s = min * 2 + 1;
+		else if ( upB < m_halfSize )
+			s = min * 2 + 1;
+		else if ( downB < m_halfSize)
+			s = min * 2 + 1;
+
+		// Filter of size 1x1, no need to sort
+		if (s == 1)
 			return m_d_HSVt[tid];
-		}
-		else
-		{
-			// Allocate memory for array of size windowSize*windowSize that will be sorted
-			float3 sortTab[9];
 
-			// Double for loop to fill the array with pixel around the center pixel
-			for (int x = -m_halfSize; x <= m_halfSize; x++)
-			{
-				for (int y = -m_halfSize; y <= m_halfSize; y++)
-				{
-					// Compute temp tid of pixel that will be added
-					int tempTid = tid - (y * m_height + x);
-					// Add the pixel to the array
-					sortTab[(x + m_halfSize) * m_size + (y + m_halfSize)] = m_d_HSVt[tempTid];
-				}
-			}
+		// Fill the array with window's values
+		fill(sortTab, tid, s);
 
-			//float3 sortTab[3] = {m_d_HSVt[tid - 1], m_d_HSVt[tid], m_d_HSVt[tid + 1]};
-			// Function that sort the array
-			sort(sortTab, m_size * m_size);
+		// Sort the array in ascending order
+		sort(sortTab, s * s);
 
-			// The output is the median value of the array
-			//return sortTab[m_size + 1];
-			return make_float3(0,0,0);
-			//return m_d_HSVt[tid];
-		}
+		// The output is the median value of the array
+		return sortTab[s + 1];
+
 	}
 };
 
@@ -87,11 +109,12 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 	// Get input dimensions
 	int width = in.getWidth(); int height = in.getHeight();
+	printf("width:%d, height:%d\n", width, height);
 
 	// Setup kernel block and grid size
 	dim3 blockSize = dim3(16, 16);
-	dim3 gridSize = dim3(ceilf(static_cast<float>(width) / blockSize.x),
-	 			 ceilf(static_cast<float>(height) / blockSize.y));
+	dim3 gridSize = dim3(	ceilf(static_cast<float>(width) / blockSize.x),
+	 			ceilf(static_cast<float>(height) / blockSize.y));
 	printf("blockSize:%d %d, gridSize:%d %d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
 
 	// Compute number of pixels
@@ -119,7 +142,6 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	chrUP.stop();
 
 
-
 	//*************/
 	// PROCESSING
 	//*************/
@@ -132,7 +154,7 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	// Convertion from RGB to HSV
 	rgb2hsv<<<gridSize, blockSize>>>(devRGB, devHSV, width, height);
 	// Copy memory from device to host
-	cudaMemcpy(hostImageHSV, devHSV, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	cudaMemcpy(hostImageHSV, devHSV, pixelCount * sizeof(float3), cudaMemcpyDeviceToHost);
 
 
 	// MEDIAN FILTER WITH THRUST
@@ -142,35 +164,15 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	thrust::host_vector<float3> HSVtOutput(pixelCount);
 	for(int i = pixelCount; i--; ) {
 		HSVt[i] = hostImageHSV[i];
-		HSVtOutput[i] = make_float3(-1, -1, -1);
+		HSVtOutput[i] = make_float3(0, 0, 0);
 	}
 	thrust::device_vector<float3> d_HSVt(HSVt);
 	thrust::device_vector<float3> d_HSVtOutput(HSVt.size());
 
 	thrust::device_ptr<float3> d_HSVt_val = d_HSVt.data();
-/*
-	cudaStream_t s1;
-	cudaStreamCreate(&s1);
-*/
 
 
 	// Process Thrust
-/*
-	thrust::transform(
-		d_HSVt.begin(), d_HSVt.end(),
-		d_HSVtOutput.begin(),
-		MedianFilter()
-	);
-*/
-/*
-	thrust::for_each(
-		thrust::cuda::par.on(s1),
-		d_idxs.begin(),
-		d_idxs.end(), MedianFilter<float3>(thrust::raw_pointer_cast(d_data.data()))
-	);
-*/
-//	cudaStreamSynchronize(s1);
-
 	thrust::copy_n(
 		thrust::make_transform_iterator(
 			thrust::make_counting_iterator(static_cast<int>(0)),
@@ -179,18 +181,19 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 		d_HSVtOutput.begin()
 	);
 
+
+
 	// Result Thrust
 	HSVtOutput = d_HSVtOutput;
 	for(int i = pixelCount; i--; ) {
 		hostImageHSV[i] = HSVtOutput[i];
 	}
 
-//	cudaStreamDestroy(s1);
 
 	// CONVERTION HSV TO RGB
 	//======================
 	// Copy memory from host to device
-	cudaMemcpy(devHSV, hostImageHSV, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
+	cudaMemcpy(devHSV, hostImageHSV, pixelCount * sizeof(float3), cudaMemcpyHostToDevice);
 	// Convertion from HSV to RGB
 	hsv2rgb<<<gridSize, blockSize>>>(devHSV, devRGB, width, height);
 	// Copy memory from device to host

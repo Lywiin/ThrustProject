@@ -83,6 +83,20 @@ void rgb2hsv( const uchar3 *const inRGB, float3 *outHSV, const int width, const 
 	float3 resultHSV = RGB2HSV(inRGB[tid]);
 	outHSV[tid] = resultHSV;
 }
+// Conversion from RGB (inRGB) to HSV (outH, outS, outV)
+// Launched with 2D grid
+__global__
+void rgb2hsv( const float3 *const inRGB, float3 *outHSV, const int width, const int height ) {
+	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+	if (tidx > width) return;
+	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
+	if (tidy > height) return;
+	int tid = tidx + tidy * width;
+
+	uchar3 inRGBu = make_uchar3(inRGB[tid].x, inRGB[tid].y, inRGB[tid].z);
+	float3 resultHSV = RGB2HSV(inRGBu);
+	outHSV[tid] = resultHSV;
+}
 
 // Conversion from HSV (inH, inS, inV) to RGB (outRGB)
 // Launched with 2D grid
@@ -96,6 +110,20 @@ void hsv2rgb( const float3 *inHSV, uchar3 *const outRGB, const int width, const 
 
 	uchar3 outRGBtid = HSV2RGB(inHSV[tid].x, inHSV[tid].y, inHSV[tid].z);
 	outRGB[tid] = outRGBtid;
+}
+// Conversion from HSV (inH, inS, inV) to RGB (outRGB)
+// Launched with 2D grid
+__global__
+void hsv2rgb( const float3 *inHSV, float3 *const outRGB, const int width, const int height ) {
+	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+	if (tidx > width) return;
+	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
+	if (tidy > height) return;
+	int tid = tidx + tidy * width;
+
+	uchar3 outRGBtid = HSV2RGB(inHSV[tid].x, inHSV[tid].y, inHSV[tid].z);
+	float3 outRGBf = make_float3(outRGBtid.x, outRGBtid.y, outRGBtid.z);
+	outRGB[tid] = outRGBf;
 }
 
 // Sort an array by ascending order using bubble sort method
