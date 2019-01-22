@@ -78,21 +78,75 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 }
 */
 
+class MedianFunctor : public thrust::unary_function<float3, float3> {
+	const thrust::device_ptr<float3> m_d_HSVt;
+	const int m_width;
+	const int m_height;
+	const int m_size;
+	const int m_halfSize;
+public:
+	__host__ __device__ MedianFunctor() = delete;
+	__host__ __device__ MedianFunctor(thrust::device_ptr<float3> d_HSVt, const int width, const int height, const int size, const int halfSize)  : m_width(width), m_height(height), m_d_HSVt(d_HSVt), m_size(size), m_halfSize(halfSize) {}
+	MedianFunctor(const MedianFunctor&) = default;
+	
+	// Sort an array by ascending order using bubble sort method
+	__host__ __device__
+	void sort( float3* inTab, int tabSize )
+	{
+		for (int i = 0; i < tabSize / 2; i++)
+		{
+			int min = i;
+			for (int l = i + 1; l < tabSize; ++l)
+				if (inTab[l].z < inTab[min].z)
+					min = l;
+			float3 temp = inTab[i];
+			inTab[i] = inTab[min];
+			inTab[min] = temp;
+		}
+	}
 
-class MedianFilter : public thrust::unary_function<float3, float3> {
-	public:
-	__device__ float3 operator()(float3 &inHSV) {
-		//return int( color.color == ColoredObject::BLUE );
-		return inHSV;
+	__host__ __device__ float3 operator()(int tid) {
+		if (	tid % m_height < m_halfSize ||
+			m_height - (tid % m_height) - 1 < m_halfSize ||
+			tid / m_height < m_halfSize ||
+			m_width - (tid / m_height) - 1 < m_halfSize)
+		{
+			return m_d_HSVt[tid];
+		}
+		else
+		{
+			// Allocate memory for array of size windowSize*windowSize that will be sorted
+			float3 sortTab[9];
+
+			// Double for loop to fill the array with pixel around the center pixel
+			for (int x = -m_halfSize; x <= m_halfSize; x++)
+			{
+				for (int y = -m_halfSize; y <= m_halfSize; y++)
+				{
+					// Compute temp tid of pixel that will be added
+					int tempTid = tid - (y * m_height + x);
+					// Add the pixel to the array
+					sortTab[(x + m_halfSize) * m_size + (y + m_halfSize)] = m_d_HSVt[tempTid];
+				}
+			}
+
+			//float3 sortTab[3] = {m_d_HSVt[tid - 1], m_d_HSVt[tid], m_d_HSVt[tid + 1]};
+			// Function that sort the array
+			sort(sortTab, m_size * m_size);
+
+			// The output is the median value of the array
+			return sortTab[m_size + 1];
+			//return m_d_HSVt[tid];
+		}
 	}
 };
 
 float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	ChronoGPU chrUP, chrDOWN, chrGPU;
 
-	//*************
+	//*************/
 	// SETUP
-	//*************
+	//*************/
 	chrUP.start();
 
 	// Get input dimensions
@@ -130,9 +184,9 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 
 
-	//*************
+	//*************/
 	// PROCESSING
-	//*************
+	//*************/
 	chrGPU.start();
 
 	// CONVERTION RGB TO HSV
@@ -157,11 +211,36 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	thrust::device_vector<float3> d_HSVt(HSVt);
 	thrust::device_vector<float3> d_HSVtOutput(HSVt.size());
 
+	thrust::device_ptr<float3> d_HSVt_val = d_HSVt.data();
+/*
+	cudaStream_t s1;
+	cudaStreamCreate(&s1);
+*/
+
+
 	// Process Thrust
+/*
 	thrust::transform(
 		d_HSVt.begin(), d_HSVt.end(),
 		d_HSVtOutput.begin(),
 		MedianFilter()
+	);
+*/
+/*
+	thrust::for_each(
+		thrust::cuda::par.on(s1),
+		d_idxs.begin(),
+		d_idxs.end(), MedianFilter<float3>(thrust::raw_pointer_cast(d_data.data()))
+	);
+*/
+//	cudaStreamSynchronize(s1);
+
+	thrust::copy_n(
+		thrust::make_transform_iterator(
+			thrust::make_counting_iterator(static_cast<int>(0)),
+			MedianFunctor(d_HSVt_val, width, height, size, size / 2)),
+		pixelCount,
+		d_HSVtOutput.begin()
 	);
 
 	// Result Thrust
@@ -170,6 +249,7 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 		hostImageHSV[i] = HSVtOutput[i];
 	}
 
+//	cudaStreamDestroy(s1);
 
 	// CONVERTION HSV TO RGB
 	//======================
@@ -184,9 +264,9 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 
 
-	//*************
+	//*************/
 	// CLEANING
-	//*************
+	//*************/
 	chrDOWN.start();
 	cudaError_t err = cudaGetLastError();
 	if (err != cudaSuccess)
@@ -209,8 +289,8 @@ float student1(const PPMBitmap &in, PPMBitmap &out, const int size) {
 
 
 
-	//*************
+	//*************/
 	// RETURN
-	//*************
+	//*************/
 	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime();
 }
