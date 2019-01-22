@@ -61,7 +61,6 @@ public:
 
 	__host__ __device__ float3 operator()(int tid) {
 
-		// Allocate memory for array of size windowSize*windowSize that will be sorted
 		float3 sortTab[225];
 		int s = m_size;
 
@@ -74,13 +73,7 @@ public:
 		int minUP = (upB < downB ? upB : downB);
 		int min = (minLR < minUP ? minLR : minUP);
 
-		if ( leftB < m_halfSize )
-			s = min * 2 + 1;
-		else if ( rightB < m_halfSize )
-			s = min * 2 + 1;
-		else if ( upB < m_halfSize )
-			s = min * 2 + 1;
-		else if ( downB < m_halfSize)
+		if ( leftB < m_halfSize || rightB < m_halfSize || upB < m_halfSize || downB < m_halfSize )
 			s = min * 2 + 1;
 
 		// Filter of size 1x1, no need to sort

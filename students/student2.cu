@@ -159,45 +159,6 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 
 	if ( leftB < halfSize || rightB < halfSize || upB < halfSize || downB < halfSize )
 		s = min * 2 + 1;
-/*
-	// Borders do not change from the input
-	if (	tid % height < halfSize ||
-		height - (tid % height) - 1 < halfSize ||
-		tid / height < halfSize ||
-		width - (tid / height) - 1 < halfSize)
-	{
-		outHSV[tid] = inHSV[tid];
-	}
-	else
-	{
-		// Allocate memory for array of size windowSize*windowSize that will be sorted
-//		float3 *sortTab = new float3[windowSize * windowSize];
-
-		// Fill the array with window's values
-		fill(sortTab, tid, windowSize, inHSV, height);
-
-		// Double for loop to fill the array with pixel around the center pixel
-		for (int x = -halfSize; x <= halfSize; x++)
-		{
-			for (int y = -halfSize; y <= halfSize; y++)
-			{
-				// Compute temp tid of pixel that will be added
-				int tempTid = tid - (y * height + x);
-				// Add the pixel to the array
-				sortTab[(x + halfSize) * windowSize + (y + halfSize)] = inHSV[tempTid];
-			}
-		}
-
-		// Function that sort the array
-		sort(sortTab, windowSize * windowSize);
-
-		// The output is the median value of the array
-		outHSV[tid] = sortTab[windowSize + 1];
-
-		// Free the sorting tab
-//		free(sortTab);
-	}
-*/
 
 	// Filter of size 1x1, no need to sort
 	if (s == 1)
