@@ -83,20 +83,6 @@ void rgb2hsv( const uchar3 *const inRGB, float3 *outHSV, const int width, const 
 	float3 resultHSV = RGB2HSV(inRGB[tid]);
 	outHSV[tid] = resultHSV;
 }
-// Conversion from RGB (inRGB) to HSV (outH, outS, outV)
-// Launched with 2D grid
-__global__
-void rgb2hsv( const float3 *const inRGB, float3 *outHSV, const int width, const int height ) {
-	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
-	if (tidx > width) return;
-	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
-	if (tidy > height) return;
-	int tid = tidx + tidy * width;
-
-	uchar3 inRGBu = make_uchar3(inRGB[tid].x, inRGB[tid].y, inRGB[tid].z);
-	float3 resultHSV = RGB2HSV(inRGBu);
-	outHSV[tid] = resultHSV;
-}
 
 // Conversion from HSV (inH, inS, inV) to RGB (outRGB)
 // Launched with 2D grid
@@ -110,20 +96,6 @@ void hsv2rgb( const float3 *inHSV, uchar3 *const outRGB, const int width, const 
 
 	uchar3 outRGBtid = HSV2RGB(inHSV[tid].x, inHSV[tid].y, inHSV[tid].z);
 	outRGB[tid] = outRGBtid;
-}
-// Conversion from HSV (inH, inS, inV) to RGB (outRGB)
-// Launched with 2D grid
-__global__
-void hsv2rgb( const float3 *inHSV, float3 *const outRGB, const int width, const int height ) {
-	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
-	if (tidx > width) return;
-	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
-	if (tidy > height) return;
-	int tid = tidx + tidy * width;
-
-	uchar3 outRGBtid = HSV2RGB(inHSV[tid].x, inHSV[tid].y, inHSV[tid].z);
-	float3 outRGBf = make_float3(outRGBtid.x, outRGBtid.y, outRGBtid.z);
-	outRGB[tid] = outRGBf;
 }
 
 // Sort an array by ascending order using bubble sort method
@@ -142,6 +114,25 @@ void sort( float3* inTab, int tabSize )
 	}
 }
 
+// Fill an array in preparation for sorting
+__device__
+void fill( float3* inTab, int tid, int size, const float3 *inHSV, const int height)
+{
+	int halfSize = size / 2;
+
+	// Double for loop to fill the array with pixel around the center pixel
+	for (int x = -halfSize; x <= halfSize; x++)
+	{
+		for (int y = -halfSize; y <= halfSize; y++)
+		{
+			// Compute temp tid of pixel that will be added
+			int tempTid = tid - (y * height + x);
+			// Add the pixel to the array
+			inTab[(x + halfSize) * size + (y + halfSize)] = inHSV[tempTid];
+		}
+	}
+}
+
 // Apply median filter on HSV image
 // Launched with 2D grid
 __global__
@@ -154,9 +145,27 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 
 	int halfSize = windowSize / 2;
 
-	if(tid == 0)
-		printf("windowSize: %d, halfSize: %d\n", windowSize, halfSize);
+	float3 sortTab[225];
+	int s = windowSize;
 
+	int leftB = tid % height;
+	int rightB = height - (tid % height) - 1;
+	int upB = tid / height;
+	int downB = width - (tid / height) - 1;
+
+	int minLR = (leftB < rightB ? leftB : rightB);
+	int minUP = (upB < downB ? upB : downB);
+	int min = (minLR < minUP ? minLR : minUP);
+
+	if ( leftB < halfSize || rightB < halfSize || upB < halfSize || downB < halfSize )
+	{
+		s = min * 2 + 1;
+
+		// Filter of size 1x1, no need to sort
+		if (s == 1)
+			outHSV[tid] = inHSV[tid];
+	}
+/*
 	// Borders do not change from the input
 	if (	tid % height < halfSize ||
 		height - (tid % height) - 1 < halfSize ||
@@ -168,7 +177,10 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 	else
 	{
 		// Allocate memory for array of size windowSize*windowSize that will be sorted
-		float3 *sortTab = new float3[windowSize * windowSize];
+//		float3 *sortTab = new float3[windowSize * windowSize];
+
+		// Fill the array with window's values
+		fill(sortTab, tid, windowSize, inHSV, height);
 
 		// Double for loop to fill the array with pixel around the center pixel
 		for (int x = -halfSize; x <= halfSize; x++)
@@ -189,8 +201,18 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 		outHSV[tid] = sortTab[windowSize + 1];
 
 		// Free the sorting tab
-		free(sortTab);
+//		free(sortTab);
 	}
+*/
+	// Fill the array with window's values
+	fill(sortTab, tid, s, inHSV, height);
+
+	// Function that sort the array
+	sort(sortTab, s * s);
+
+	// The output is the median value of the array
+	outHSV[tid] = sortTab[s + 1];
+
 }
 
 
