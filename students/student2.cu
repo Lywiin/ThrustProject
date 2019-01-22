@@ -158,13 +158,7 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 	int min = (minLR < minUP ? minLR : minUP);
 
 	if ( leftB < halfSize || rightB < halfSize || upB < halfSize || downB < halfSize )
-	{
 		s = min * 2 + 1;
-
-		// Filter of size 1x1, no need to sort
-		if (s == 1)
-			outHSV[tid] = inHSV[tid];
-	}
 /*
 	// Borders do not change from the input
 	if (	tid % height < halfSize ||
@@ -204,15 +198,21 @@ void medianFilter( const float3 *inHSV, float3 *outHSV, const int width, const i
 //		free(sortTab);
 	}
 */
-	// Fill the array with window's values
-	fill(sortTab, tid, s, inHSV, height);
 
-	// Function that sort the array
-	sort(sortTab, s * s);
+	// Filter of size 1x1, no need to sort
+	if (s == 1)
+		outHSV[tid] = inHSV[tid];
+	else
+	{
+		// Fill the array with window's values
+		fill(sortTab, tid, s, inHSV, height);
 
-	// The output is the median value of the array
-	outHSV[tid] = sortTab[s + 1];
+		// Function that sort the array
+		sort(sortTab, s * s);
 
+		// The output is the median value of the array
+		outHSV[tid] = sortTab[s + 1];
+	}
 }
 
 
