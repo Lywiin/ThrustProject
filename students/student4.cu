@@ -1,17 +1,15 @@
 #include "student4.hpp"
-/*
-struct Node;
+
 struct Edge{
-	Node src;
-	Node dest;
+	int tidSrc;
+	int tidDest;
 	int weight;
 };
 
-struct Node{
-	uchar3 value;
-	Edge edges[4];
-};
-*/
+struct Graph{
+	int V, E;
+	Edge* edge;
+}
 
 /*
 * You have here to compute the segmented image from the filtered one.
