@@ -4,14 +4,70 @@
 #include "../utils/utils.cuh"
 
 struct Edge{
-	int tidSrc;
-	int tidDest;
+	int src;
+	int dest;
 	int weight;
 };
 
 struct Graph{
 	int V, E;
 	Edge* edge;
+};
+
+// Creates a graph with V vertices and E edges
+struct Graph* createGraph(int V, int E)
+{
+	Graph* graph = new Graph;
+	graph->V = V;
+	graph->E = E;
+	graph->edge = new Edge[E];
+	return graph;
+}
+
+// Destroy a graph
+void destroyGraph(struct Graph* graph)
+{
+	free(graph->edge);
+	free(graph);
+}
+
+__device__
+int computeWeight(const uchar3* inHSV, const int srcTid, const int destTid)
+{
+	int x = inHSV[srcTid].x - inHSV[destTid].x >= 0 ? inHSV[srcTid].x - inHSV[destTid].x : (inHSV[srcTid].x - inHSV[destTid].x) * -1;
+	int y = inHSV[srcTid].y - inHSV[destTid].y >= 0 ? inHSV[srcTid].y - inHSV[destTid].y : (inHSV[srcTid].y - inHSV[destTid].y) * -1;
+	int z = inHSV[srcTid].z - inHSV[destTid].z >= 0 ? inHSV[srcTid].z - inHSV[destTid].z : (inHSV[srcTid].z - inHSV[destTid].z) * -1;
+	return x + y + z;
+}
+
+__global__
+void InitializeEdges(const uchar3* inHSV, Edge* edge, const int E, const int width, const int height)
+{
+	int tidx = threadIdx.x + blockIdx.x * blockDim.x;
+	if (tidx >= width) return;
+	int tidy = threadIdx.y + blockIdx.y * blockDim.y;
+	if (tidy >= height) return;
+	int tid = tidx + tidy * width;
+
+	//corner
+	if (tid != 0) {
+		// not up
+		if (!(tid / height == 0))
+		{
+			int destTid = tid - height;
+			edge[tid - height].src = tid;
+			edge[tid - height].dest = destTid;
+			edge[tid - height].weight = computeWeight(inHSV, tid, destTid);
+		}
+		// not left
+		if (!(tid % height == 0))
+		{
+			int destTid = tid - 1;
+			edge[E / 2 + tid - 1].src = tid;
+			edge[E / 2 + tid - 1].dest = destTid;
+			edge[E / 2 + tid - 1].weight = computeWeight(inHSV, tid, destTid);
+		}
+	}
 }
 
 /*
@@ -23,12 +79,13 @@ struct Graph{
 * @param threshold: thresholding value (remove the edges greater than it)
 */
 float student4(const PPMBitmap& in, PPMBitmap& out, const int threshold) {
-	ChronoGPU chrUP, chrDOWN, chrGPU;
+//	ChronoGPU chrUP, chrDOWN, chrGPU;
 
-	//*************
+	//*************/
 	// SETUP
-	//*************
-	chrUP.start();
+	//*************/
+
+//	chrUP.start();
 
 	// Get input dimensions
 	int width = in.getWidth(); int height = in.getHeight();
@@ -59,35 +116,53 @@ float student4(const PPMBitmap& in, PPMBitmap& out, const int threshold) {
 		}
 	}
 
+	// Prepare Graph
+	int E = (width - 1) * (height - 1);
+	struct Graph* graph = createGraph(pixelCount, E);
+
+	Edge *devEdge;
+	cudaMalloc(&devEdge, E * sizeof(Edge));
+
 	// Copy memory from host to device
 	cudaMemcpy(devRGB, hostImage, pixelCount * sizeof(uchar3), cudaMemcpyHostToDevice);
-	chrUP.stop();
+
+	// Compute every edge (not working)
+/*
+	cudaMemcpy(devEdge, graph->edge, E * sizeof(Edge), cudaMemcpyHostToDevice);
+	InitializeEdges<<<gridSize, blockSize>>>(devRGB, devEdge, E, width, height);
+	cudaMemcpy(graph->edge, devEdge, E * sizeof(Edge), cudaMemcpyDeviceToHost);
+
+	for (int i = 0; i < 10; i++)
+	{
+		printf("%d %d %d\n", graph->edge[i].src, graph->edge[i].dest, graph->edge[i].weight);
+	}
+*/
+//	chrUP.stop();
 
 
 
-	//*************
+	//*************/
 	// PROCESSING
-	//*************
-	chrGPU.start();
+	//*************/
 
-	// Create Graph
-//	medianFilter<<<gridSize, blockSize>>>(devHSV, devHSVOutput, width, height, size);
-
-	chrGPU.stop();
+//	chrGPU.start();
 
 
+//	chrGPU.stop();
 
-	//*************
+
+
+	//*************/
 	// CLEANING
-	//*************
-	chrDOWN.start();
-	// Copy memory from device to host
-//	cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
-	cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+	//*************/
 
-	cudaError_t err = cudaGetLastError();
-	if (err != cudaSuccess)
-		printf("Error: %s\n", cudaGetErrorString(err));
+	// Destroy allocated graph
+	destroyGraph(graph);
+
+//	chrDOWN.start();
+	// Copy memory from device to host
+	cudaMemcpy(hostImage, devRGBOutput, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
+//	cudaMemcpy(hostImage, devRGB, pixelCount * sizeof(uchar3), cudaMemcpyDeviceToHost);
 
 	// Convert output from uchar3 to PPMBitmap
 	i = 0;
@@ -101,14 +176,18 @@ float student4(const PPMBitmap& in, PPMBitmap& out, const int threshold) {
 	// Free device Memory
 	cudaFree(&devRGB);
 	cudaFree(&devRGBOutput);
+	cudaFree(&devEdge);
 
-	chrDOWN.stop();
+//	chrDOWN.stop();
+
+//	cudaError_t err = cudaGetLastError();
+//	if (err != cudaSuccess)
+//		printf("Error: %s\n", cudaGetErrorString(err));
 
 
-
-	//*************
+	//*************/
 	// RETURN
-	//*************
-	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime(); 
-    return 0.f;
+	//*************/
+//	return chrUP.elapsedTime() + chrDOWN.elapsedTime() + chrGPU.elapsedTime();
+	return 0.f;
 }
