@@ -199,7 +199,7 @@ float student2(const PPMBitmap &in, PPMBitmap &out, const int size) {
 	int width = in.getWidth(); int height = in.getHeight();
 
 	// Setup kernel block and grid size
-	dim3 blockSize = dim3(16, 16);
+	dim3 blockSize = dim3(8, 8);
 	dim3 gridSize = dim3(ceilf(static_cast<float>(width) / blockSize.x),
 	 			 ceilf(static_cast<float>(height) / blockSize.y));
 	printf("blockSize:%d %d, gridSize:%d %d\n", blockSize.x, blockSize.y, gridSize.x, gridSize.y);
